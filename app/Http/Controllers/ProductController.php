@@ -4,37 +4,55 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Product;
-use App\Models\Store;
-use App\Models\Category;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @OA\Tag(
+ *     name="Products",
+ *     description="API quản lý sản phẩm"
+ * )
+ */
 class ProductController extends Controller
 {
     /**
-     * Hiển thị danh sách sản phẩm
+     * @OA\Get(
+     *     path="/api/products",
+     *     tags={"Products"},
+     *     summary="Lấy danh sách sản phẩm",
+     *     @OA\Response(
+     *         response=200,
+     *         description="Danh sách sản phẩm",
+     *         @OA\JsonContent(type="array", @OA\Items(ref="#/components/schemas/Product"))
+     *     )
+     * )
      */
     public function index()
     {
         $products = Product::with(['store', 'category'])->get();
-        return view('products.index', compact('products'));
+        return response()->json($products);
     }
 
     /**
-     * Hiển thị form thêm sản phẩm
-     */
-    public function create()
-    {
-        $stores = Store::all();
-        $categories = Category::all();
-        return view('products.create', compact('stores', 'categories'));
-    }
-
-    /**
-     * Lưu sản phẩm mới
+     * @OA\Post(
+     *     path="/api/products",
+     *     tags={"Products"},
+     *     summary="Thêm sản phẩm mới",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(ref="#/components/schemas/ProductRequest")
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Sản phẩm đã được thêm",
+     *         @OA\JsonContent(ref="#/components/schemas/Product")
+     *     )
+     * )
      */
     public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
             'original_price' => 'required|numeric|min:0',
             'discounted_price' => 'nullable|numeric|min:0',
             'expiration_date' => 'nullable|date',
@@ -43,45 +61,31 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
         ]);
 
-        Product::create($request->all());
-        return redirect()->route('products.index')->with('success', 'Sản phẩm đã được thêm!');
+        $product = Product::create($request->all());
+        return response()->json(['message' => 'Sản phẩm đã được thêm!', 'product' => $product], 201);
     }
 
     /**
-     * Hiển thị form chỉnh sửa sản phẩm
+     * @OA\Get(
+     *     path="/api/products/{id}",
+     *     tags={"Products"},
+     *     summary="Lấy chi tiết sản phẩm",
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Chi tiết sản phẩm",
+     *         @OA\JsonContent(ref="#/components/schemas/Product")
+     *     )
+     * )
      */
-    public function edit(Product $product)
+    public function show(Product $product)
     {
-        $stores = Store::all();
-        $categories = Category::all();
-        return view('products.edit', compact('product', 'stores', 'categories'));
+        return response()->json($product);
     }
 
-    /**
-     * Cập nhật sản phẩm
-     */
-    public function update(Request $request, Product $product)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'original_price' => 'required|numeric|min:0',
-            'discounted_price' => 'nullable|numeric|min:0',
-            'expiration_date' => 'nullable|date',
-            'stock_quantity' => 'required|integer|min:0',
-            'store_id' => 'required|exists:stores,id',
-            'category_id' => 'required|exists:categories,id',
-        ]);
-
-        $product->update($request->all());
-        return redirect()->route('products.index')->with('success', 'Sản phẩm đã được cập nhật!');
-    }
-
-    /**
-     * Xóa sản phẩm
-     */
-    public function destroy(Product $product)
-    {
-        $product->delete();
-        return redirect()->route('products.index')->with('success', 'Sản phẩm đã được xóa!');
-    }
 }

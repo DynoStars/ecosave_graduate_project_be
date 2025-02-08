@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\ExpertDetail;
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
@@ -10,6 +12,7 @@ use Illuminate\Support\Facades\Validator;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use GuzzleHttp\Client;
+
 class AuthController extends Controller
 {
     /**
@@ -71,23 +74,23 @@ class AuthController extends Controller
      **/
 
 
-     public function login(Request $request)
-     {
-         $validator = Validator::make($request->all(), [
-             'email' => 'required|email',
-             'password' => 'required',
-         ]);
+    public function login(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
 
-         if ($validator->fails()) {
-             return response()->json($validator->errors(), 422);
-         }
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
 
-         if (!$token = auth()->attempt($validator->validated())) {
-             return response()->json(['error' => 'Unauthorized'], 401);
-         }
+        if (!$token = auth()->attempt($validator->validated())) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
 
-         return $this->createNewToken($token);
-     }
+        return $this->createNewToken($token);
+    }
 
 
 
@@ -145,60 +148,72 @@ class AuthController extends Controller
      * )
      */
 
-    public function register(Request $request)
-    {
-        // Kiểm tra thông tin người dùng cho các vai trò khác
-        $validator = Validator::make($request->all(), [
-            'name' => 'nullable',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string||confirmed|min:6|max:25',
-            'role_id' => 'required|exists:roles,id',
-            'experience' => 'nullable|string', // Trường experience có thể null
-            'certificate' => 'nullable|string', // Trường certificate có thể null
-        ]);
+     public function register(Request $request)
+     {
+         // Kiểm tra thông tin người dùng cho các vai trò khác
+         $validator = Validator::make($request->all(), [
+             'name' => 'nullable',
+             'email' => 'required|email|unique:users,email',
+             'password' => 'required|string|confirmed|min:6|max:25',
+             'address' => 'required|string',
+             'latitude' => 'required',
+             'longitude' => 'required',
+             'role_id' => 'required|exists:roles,id',
+             // Thêm các trường cần thiết cho Store nếu role_id = 3
+             'store_name' => 'required_if:role_id,3|string|max:255',
+             'avatar' => 'nullable|string|max:255',
+             'store_type' => 'required_if:role_id,3|string|max:100',
+             'opening_hours' => 'nullable|string|max:255',
+             'description' => 'nullable|string',
+         ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors()->toJson(), 400);
-        }
+         if ($validator->fails()) {
+             return response()->json($validator->errors()->toJson(), 400);
+         }
 
-        // Tạo người dùng mới
-        $user = User::create([
-            'name' => 'User',
-            'email' => $request->email,
-            'password' => bcrypt($request->password),
-            'address' => '',
-            'profile_picture' => asset('assets/img/avatar/avatar-4.png'),
-            'date_of_birth' => null,
-            'phone_number' => '',
-            'gender' => '',
-            'status' => true,
-            'role_id' => $request->role_id,
-        ]);
+         // Tạo người dùng mới
+         $user = User::create([
+             'username' => $request->name, // Thay 'name' thành 'username'
+             'email' => $request->email,
+             'email_verified_at' => now(),
+             'password' => bcrypt($request->password),
+             'address' => $request->address, // Địa chỉ mặc định trống
+             'avatar' => asset('assets/img/avatar/avatar-4.png'), // Thay 'profile_picture' thành 'avatar'
+             'is_active' => true, // Sử dụng 'is_active' thay vì 'status'
+             'role' => $request->role_id, // Thay 'role_id' thành 'role'
+             'phone_number' => '', // Số điện thoại mặc định trống
+             'latitude' => $request->latitude, // Mặc định giá trị null
+             'longitude' => $request->longitude, // Mặc định giá trị null
+             'created_at' => now(),
+             'updated_at' => now(),
+         ]);
 
-        // Nếu vai trò là người dùng chuyên gia (role_id = 3) và có trường experience và certificate được cung cấp
-        if ($request->role_id == 3 && $request->has('experience') && $request->has('certificate')) {
-            // Kiểm tra xem đã có dữ liệu trong bảng expert_details tương ứng với user_id của người dùng mới hay không
-            $checkExpert = DB::table('expert_details')->where('user_id', $user->id)->exists();
+         // Nếu role_id là 3 thì tạo thông tin cửa hàng
+         if ($request->role_id == 3) {
+             $store = Store::create([
+                 'store_name' => $request->store_name,
+                 'avatar' => $request->avatar ?? 'https://via.placeholder.com/200x200', // Avatar mặc định
+                 'store_type' => $request->store_type,
+                 'opening_hours' => $request->opening_hours,
+                 'status' => 'active', // Mặc định trạng thái là active
+                 'contact_email' => $request->email,
+                 'contact_phone' => $request->phone_number ?? null,
+                 'latitude' => $request->latitude,
+                 'longitude' => $request->longitude,
+                 'description' => $request->description,
+                 'user_id' => $user->id, // Liên kết với user vừa tạo
+                 'created_at' => now(),
+                 'updated_at' => now(),
+             ]);
+         }
 
-            // Nếu có dữ liệu, xóa dữ liệu cũ trước khi tạo mới
-            if ($checkExpert) {
-                DB::table('expert_details')->where('user_id', $user->id)->delete();
-            }
+         return response()->json([
+             'message' => 'User successfully registered',
+             'user' => $user,
+             'store' => $request->role_id == 3 ? $store : null, // Nếu có tạo store thì trả về thông tin
+         ], 201);
+     }
 
-            // Tạo chi tiết chuyên gia mới
-            ExpertDetail::create([
-                'user_id' => $user->id,
-                'certificate' => $request->certificate,
-                'experience' => $request->experience,
-                'count_rating' => 5
-            ]);
-        }
-
-        return response()->json([
-            'message' => 'User successfully registered',
-            'user' => $user
-        ], 201);
-    }
 
 
     /**
@@ -255,14 +270,83 @@ class AuthController extends Controller
         return response()->json(['message' => 'User successfully signed out']);
     }
 
+    // /**
+    //  * Refresh a token.
+    //  *
+    //  * @return \Illuminate\Http\JsonResponse
+    //  */
+    // // public function refresh()
+    // // {
+    // //     return $this->createNewToken(auth()->refresh()); // using ok
+    // // }
+
     /**
-     * Refresh a token.
+     * Refresh the access token using the refresh token
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *      path="/api/auth/refresh",
+     *      tags={"Auth"},
+     *      summary="Refresh access token",
+     *      description="Get a new access token using a valid refresh token",
+     *      @OA\Response(
+     *          response=200,
+     *          description="Successfully refreshed token",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="access_token", type="string", example="NEW_ACCESS_TOKEN_HERE"),
+     *              @OA\Property(property="refresh_token", type="string", example="NEW_REFRESH_TOKEN_HERE"),
+     *              @OA\Property(property="expires_in", type="integer", example=3600),
+     *              @OA\Property(property="token_type", type="string", example="bearer"),
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=400,
+     *          description="Bad request. Refresh token is required."
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Unauthorized. Invalid or expired refresh token."
+     *      ),
+     *      @OA\Response(
+     *          response=500,
+     *          description="Internal server error."
+     *      ),
+     *      @OA\Parameter(
+     *          name="Authorization",
+     *          in="header",
+     *          description="Bearer refresh token",
+     *          required=true,
+     *          @OA\Schema(
+     *              type="string",
+     *              example="Bearer REFRESH_TOKEN_HERE"
+     *          )
+     *      )
+     * )
      */
-    public function refresh()
+
+
+    public function refresh(Request $request)
     {
-        return $this->createNewToken(auth()->refresh()); // using ok
+        $refreshToken = $request->header('Authorization');
+
+        if (!$refreshToken) {
+            return response()->json(['error' => 'Refresh token is required'], 400);
+        }
+
+        try {
+            // Xác thực refresh token
+            $decodedToken = auth()->setToken(str_replace('Bearer ', '', $refreshToken))->checkOrFail();
+
+            if (!isset($decodedToken['refresh']) || !$decodedToken['refresh']) {
+                return response()->json(['error' => 'Invalid refresh token'], 401);
+            }
+
+            // Tạo access token mới
+            $newToken = auth()->tokenById(auth()->user()->id);
+
+            return $this->createNewToken($newToken);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Refresh token expired or invalid'], 401);
+        }
     }
 
     /**
@@ -286,14 +370,16 @@ class AuthController extends Controller
 
     public function createNewToken($token)
     {
+        $refreshToken = auth()->claims(['refresh' => true])->setTTL(20160)->tokenById(auth()->user()->id); // Refresh token TTL = 14 ngày (20160 phút)
+
         return response()->json([
             'access_token' => $token,
+            'refresh_token' => $refreshToken,
             'token_type' => 'bearer',
-            'expires_in' => auth()->factory()->getTTL() * 60, // Thời gian sống của token tính theo giây
-            'user' => auth()->user() // using ok
+            'expires_in' => auth()->factory()->getTTL() * 60,
+            'user' => auth()->user()
         ]);
     }
-
 
     public function changePassWord(Request $request)
     {
@@ -318,5 +404,4 @@ class AuthController extends Controller
             'user' => $user,
         ], 201);
     }
-
 }
