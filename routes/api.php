@@ -17,6 +17,8 @@ use App\Http\Controllers\ProductController;
 |
 */
 
+Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/products/{id}', [ProductController::class, 'productDetail']);
 
 require __DIR__ . '/auth.php';
 
@@ -26,9 +28,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 Route::group(['middleware' => 'auth:api'], function () {
     Route::get('/users', [UserController::class, 'index']);
-
-    Route::get('/products', [ProductController::class, 'index']);
-    Route::get('/products/{id}', [ProductController::class, 'productDetail']);
 });
 
 Route::group(['prefix' => 'stores/{storeId}/products', 'middleware' => 'auth:api'], function () {
