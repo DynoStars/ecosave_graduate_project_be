@@ -30,7 +30,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::group(['middleware' => 'auth:api'], function () {
-    Route::get('/products', [ProductController::class, 'index']);
-    Route::post('/products', [ProductController::class, 'store']);
-    Route::get('/products/{id}', [ProductController::class, 'show']);
+    Route::get('/stores/products', [ProductController::class, 'getProductsByStore']);
+    Route::post('/stores/products', [ProductController::class, 'postAddProduct']);
+    Route::get('/stores/products/{id}', [ProductController::class, 'getProductByStore']);
 });
