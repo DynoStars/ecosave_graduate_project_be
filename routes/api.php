@@ -36,5 +36,8 @@ Route::group(['prefix' => 'stores/{storeId}', 'middleware' => 'auth:api'], funct
     Route::post('/products', [ProductController::class, 'postAddProduct']);
     Route::get('/products/{productId}', [ProductController::class, 'getProductByStore']);
     Route::put('/products/{productId}', [ProductController::class, 'putUpdateProduct']);
+    Route::delete('/products/{productId}', [ProductController::class, 'deleteProduct']);
+    Route::post('/products/{productId}/restore', [ProductController::class, 'restoreProduct']);
+    Route::delete('/products/{productId}/force-delete', [ProductController::class, 'forceDeleteProduct']);
 });
 
