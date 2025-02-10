@@ -17,8 +17,10 @@ return new class extends Migration
             $table->id();
             $table->string('name', 255);
             $table->text('description')->nullable();
-            $table->decimal('original_price', 8, 2);
-            $table->decimal('discounted_price', 8, 2)->nullable();
+            $table->decimal('original_price', 10, 2);
+            $table->integer('discount_percent');
+            $table->string('product_type');
+            $table->decimal('discounted_price', 10, 2)->nullable();
             $table->date('expiration_date')->nullable();
             $table->integer('stock_quantity')->default(0);
             $table->foreignId('store_id')->constrained()->onDelete('cascade');

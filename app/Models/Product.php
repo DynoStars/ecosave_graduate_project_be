@@ -14,8 +14,10 @@ class Product extends Model
         'name',
         'description',
         'original_price',
-        'discounted_price',
+        'discount_price',
+        'discount_percent',
         'expiration_date',
+        'product_type',
         'stock_quantity',
         'store_id',
         'category_id',
@@ -31,5 +33,10 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function images()
+    {
+        return $this->hasMany(Image::class);
     }
 }
