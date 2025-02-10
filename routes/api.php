@@ -17,16 +17,18 @@ use App\Http\Controllers\ProductController;
 |
 */
 
-Route::get('/users', [UserController::class, 'index']);
-
-Route::get('/products', [ProductController::class, 'index']);
-Route::get('/products/{id}', [ProductController::class, 'productDetail']);
-
 
 require __DIR__ . '/auth.php';
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
+});
+
+Route::group(['middleware' => 'auth:api'], function () {
+    Route::get('/users', [UserController::class, 'index']);
+
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/products/{id}', [ProductController::class, 'productDetail']);
 });
 
 Route::group(['prefix' => 'stores/{storeId}', 'middleware' => 'auth:api'], function () {
