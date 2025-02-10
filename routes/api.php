@@ -29,8 +29,9 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::group(['middleware' => 'auth:api'], function () {
-    Route::get('/stores/products', [ProductController::class, 'getProductsByStore']);
-    Route::post('/stores/products', [ProductController::class, 'postAddProduct']);
-    Route::get('/stores/products/{id}', [ProductController::class, 'getProductByStore']);
+Route::group(['prefix' => 'stores/{storeId}', 'middleware' => 'auth:api'], function () {
+    Route::get('/products', [ProductController::class, 'getProductsByStore']);
+    Route::post('/products', [ProductController::class, 'postAddProduct']);
+    Route::get('/products/{productId}', [ProductController::class, 'getProductByStore']);
 });
+

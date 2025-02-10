@@ -91,33 +91,16 @@ class ProductController extends Controller
         return response()->json($formattedProduct);
     }
 
-    private function getUserStore()
+    public function getProductsByStore($storeId)
     {
-        $user = Auth::user();
-        if ($user->role !== 3) {
-            return null;
-        }
-        return Store::where('user_id', $user->id)->first();
-    }
-
-
-    public function getProductsByStore()
-    {
-        $store = $this->getUserStore();
-        if (!$store) {
-            return response()->json(['message' => 'Bạn không có quyền truy cập cửa hàng này'], 403);
-        }
+        $store = Store::findOrFail($storeId);
         $products = $store->products()->with(['store', 'category'])->paginate(10);
         return response()->json($products);
     }
 
 
-    public function postAddProduct(Request $request)
+    public function postAddProduct(Request $request, $storeId)
     {
-        $store = $this->getUserStore();
-        if (!$store) {
-            return response()->json(['message' => 'Bạn không có quyền thêm sản phẩm vào cửa hàng này'], 403);
-        }
 
 
         $request->validate([
@@ -134,12 +117,20 @@ class ProductController extends Controller
         ]);
 
 
+        $store = Store::findOrFail($storeId);
         $productData = $request->all();
         $productData['store_id'] = $store->id;
 
 
         $product = Product::create($productData);
         return response()->json(['message' => 'Sản phẩm đã được thêm!', 'product' => $product], 201);
+    }
+
+
+    public function getProductByStore($storeId, $productId)
+    {
+        $product = Product::where('store_id', $storeId)->findOrFail($productId);
+        return response()->json($product);
     }
 
 }
