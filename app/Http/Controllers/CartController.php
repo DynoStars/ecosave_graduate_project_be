@@ -12,36 +12,36 @@ use App\Helpers\ApiResponse;
 
 class CartController extends Controller
 {
-    // 🛒 API: Lấy giỏ hàng của người dùng
+    // API: Lấy giỏ hàng của người dùng
     public function getCart()
     {
         if (!Auth::check()) {
             return response()->json(['error' => 'User not authenticated.'], 401);
         }
-
+    
         $user = Auth::user();
         if (!$user) {
             return response()->json(['error' => 'User not found.'], 404);
         }
-
+    
         // Lấy giỏ hàng của user
         $cart = Cart::where('user_id', $user->id)->first();
-
+    
         if (!$cart) {
             return response()->json(['message' => 'Your cart is empty.'], 200);
         }
-
-        $cartItems = $cart->cartItems()->with('product.store','product.images')->get();
-
+    
+        $cartItems = $cart->cartItems()->with('product.store', 'product.images')->get();
+    
         if ($cartItems->isEmpty()) {
             return response()->json(['message' => 'No items in the cart.'], 200);
         }
-
-        // Tính tổng số tiền của giỏ hàng
-        $totalAmount = $cartItems->sum(function ($cartItem) {
-            return $cartItem->quantity * $cartItem->product->discounted_price;
+    
+        // Nhóm các sản phẩm theo store
+        $groupedItems = $cartItems->groupBy(function ($cartItem) {
+            return $cartItem->product->store->id; // Nhóm theo ID của cửa hàng
         });
-
+    
         // Format dữ liệu trả về
         $formattedCart = [
             'cart_id' => $cart->id,
@@ -50,29 +50,39 @@ class CartController extends Controller
                 'name' => $user->username,
                 'email' => $user->email,
             ],
-            'cart_items' => $cartItems->map(function ($cartItem) {
-                $product = $cartItem->product;
-                $store = $product->store;
-
+            'stores' => $groupedItems->map(function ($items, $storeId) {
+                $store = $items[0]->product->store; // Lấy thông tin store từ sản phẩm
+    
+                $totalQuantity = $items->sum('quantity'); // Tổng số lượng sản phẩm trong store
+                $totalAmount = $items->sum(function ($cartItem) {
+                    return $cartItem->quantity * $cartItem->product->discounted_price; // Tổng tiền cho store
+                });
+    
                 return [
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'quantity' => $cartItem->quantity,
-                    'original_price' => $product->original_price,
-                    'price' => $product->discounted_price, // Giá sau khi giảm giá
-                    'subtotal' => $cartItem->quantity * $product->discounted_price, // Tổng tiền từng sản phẩm
-                    'store' => [
-                        'store_id' => $store->id,
-                        'store_name' => $store->store_name,
-                        'store_address' => $store->address,
-                        'store_latitude' => $store->latitude,
-                        'store_longitude' => $store->longitude,
-                    ],
-                    'images' => $product->images
+                    'store_id' => $store->id,
+                    'store_name' => $store->store_name,
+                    'store_address' => $store->address,
+                    'store_latitude' => $store->latitude,
+                    'store_longitude' => $store->longitude,
+                    'total_quantity' => $totalQuantity,
+                    'total_amount' => $totalAmount,
+                    'items' => $items->map(function ($cartItem) {
+                        $product = $cartItem->product;
+    
+                        return [
+                            'product_id' => $product->id,
+                            'product_name' => $product->name,
+                            'quantity' => $cartItem->quantity,
+                            'original_price' => $product->original_price,
+                            'price' => $product->discounted_price,
+                            'subtotal' => $cartItem->quantity * $product->discounted_price,
+                            'images' => $product->images
+                        ];
+                    }),
                 ];
             }),
-            'total_amount' => $totalAmount, // Tổng số tiền giỏ hàng
         ];
+    
         return ApiResponse::success($formattedCart, "Cart returned successfully");
     }
 
