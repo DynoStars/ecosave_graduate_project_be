@@ -4,6 +4,8 @@ use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ImageController;
 
 
 /*
@@ -30,13 +32,16 @@ Route::group(['middleware' => 'auth:api'], function () {
     Route::get('/users', [UserController::class, 'index']);
 });
 
-Route::group(['prefix' => 'stores/{storeId}/products', 'middleware' => 'auth:api'], function () {
+Route::group(['prefix' => 'stores/products', 'middleware' => 'auth:api'], function () {
     Route::get('/', [ProductController::class, 'getProductsByStore']);
     Route::post('/', [ProductController::class, 'postAddProduct']);
     Route::get('/{productId}', [ProductController::class, 'getProductByStore']);
     Route::put('/{productId}', [ProductController::class, 'putUpdateProduct']);
     Route::delete('/{productId}', [ProductController::class, 'deleteProduct']);
+    Route::get('/trashed', [ProductController::class, 'getTrashedProductsByStore']);
     Route::post('/{productId}/restore', [ProductController::class, 'restoreProduct']);
     Route::delete('/{productId}/force-delete', [ProductController::class, 'forceDeleteProduct']);
 });
 
+Route::post('/upload-image', [ImageController::class, 'upload']);
+Route::get('/categories', [CategoryController::class, 'index']);
