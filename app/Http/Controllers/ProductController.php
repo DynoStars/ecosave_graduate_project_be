@@ -111,7 +111,7 @@ class ProductController extends Controller
             ],
         ];
 
-        return response()->json($formattedProduct);
+        return ApiResponse::success($product, "Lấy sản phẩm thành công", 201);;
     }
 
     private function getUserStore()
@@ -215,7 +215,7 @@ class ProductController extends Controller
 
             $product->load(['store', 'category', 'images']);
             return response()->json([
-                'message' => 'Sản phẩm đã được thêm!', 
+                'message' => 'Sản phẩm đã được thêm!',
                 'product' => $this->formatProduct($product)
             ], 201);
         } catch (\Exception $e) {
@@ -230,7 +230,7 @@ class ProductController extends Controller
             $product = Product::with(['store', 'category', 'images'])
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
-            
+
             return response()->json($this->formatProduct($product));
         } catch (\Exception $e) {
             return response()->json(['error' => 'Không thể lấy sản phẩm', 'message' => $e->getMessage()], 500);
@@ -265,7 +265,7 @@ class ProductController extends Controller
             if ($request->has('images')) {
                 // Delete existing images
                 $product->images()->delete();
-                
+
                 // Add new images
                 foreach ($request->images as $image) {
                     $product->images()->create([
@@ -277,7 +277,7 @@ class ProductController extends Controller
 
             $product->load(['store', 'category', 'images']);
             return response()->json([
-                'message' => 'Sản phẩm đã được cập nhật!', 
+                'message' => 'Sản phẩm đã được cập nhật!',
                 'product' => $this->formatProduct($product)
             ]);
         } catch (\Exception $e) {
@@ -333,10 +333,10 @@ class ProductController extends Controller
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
             $product->restore();
-            
+
             $product->load(['store', 'category', 'images']);
             return response()->json([
-                'message' => 'Sản phẩm đã được khôi phục!', 
+                'message' => 'Sản phẩm đã được khôi phục!',
                 'product' => $this->formatProduct($product)
             ]);
         } catch (\Exception $e) {
@@ -351,13 +351,13 @@ class ProductController extends Controller
             $product = Product::onlyTrashed()
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
-            
+
             // Delete associated images first
             $product->images()->delete();
-            
+
             // Then force delete the product
             $product->forceDelete();
-            
+
             return response()->json(['message' => 'Sản phẩm đã được xóa vĩnh viễn!']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Lỗi khi xóa vĩnh viễn sản phẩm!', 'message' => $e->getMessage()], 500);
