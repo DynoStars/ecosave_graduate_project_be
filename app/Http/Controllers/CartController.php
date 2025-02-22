@@ -14,50 +14,51 @@ class CartController extends Controller
 {
     // API: Lấy giỏ hàng của người dùng
     public function getCart()
-{
-    if (!Auth::check()) {
-        return response()->json(['error' => 'User not authenticated.'], 401);
-    }
+    {
+        if (!Auth::check()) {
+            return response()->json(['error' => 'User not authenticated.'], 401);
+        }
 
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['error' => 'User not found.'], 404);
-    }
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'User not found.'], 404);
+        }
 
-    // Lấy giỏ hàng của user
-    $cart = Cart::where('user_id', $user->id)->first();
+        // Lấy giỏ hàng của user
+        $cart = Cart::where('user_id', $user->id)->first();
 
-    if (!$cart) {
-        return response()->json(['message' => 'Your cart is empty.'], 200);
-    }
+        if (!$cart) {
+            return response()->json(['message' => 'Your cart is empty.'], 200);
+        }
 
-    $cartItems = $cart->cartItems()->with('product.store', 'product.images')->get();
+        $cartItems = $cart->cartItems()->with('product.store', 'product.images')->get();
 
-    if ($cartItems->isEmpty()) {
-        return response()->json(['message' => 'No items in the cart.'], 200);
-    }
+        if ($cartItems->isEmpty()) {
+            return response()->json(['message' => 'No items in the cart.'], 200);
+        }
 
-    // Tổng số lượng sản phẩm & tổng số loại sản phẩm trong giỏ hàng
-    $totalItems = $cartItems->sum('quantity');
-    $totalProducts = $cartItems->unique('product_id')->count();
+        // Tổng số lượng sản phẩm & tổng số loại sản phẩm trong giỏ hàng
+        $totalItems = $cartItems->sum('quantity');
+        $totalProducts = $cartItems->unique('product_id')->count();
 
-    // Nhóm các sản phẩm theo store
-    $groupedItems = $cartItems->groupBy(function ($cartItem) {
-        return $cartItem->product->store->id; // Nhóm theo ID của cửa hàng
-    });
+        // Nhóm các sản phẩm theo store
+        $groupedItems = $cartItems->groupBy(function ($cartItem) {
+            return $cartItem->product->store->id; // Nhóm theo ID của cửa hàng
+        });
 
-    // Format dữ liệu trả về
-    $formattedCart = [
-        'cart_id' => $cart->id,
-        'user' => [
-            'id' => $user->id,
-            'name' => $user->username,
-            'email' => $user->email,
-        ],
-        'total_items' => $totalItems, // Tổng số lượng sản phẩm trong giỏ hàng
-        'total_products' => $totalProducts, // Tổng số loại sản phẩm trong giỏ hàng
-        'stores' => $groupedItems->map(function ($items, $storeId) {
-            $store = $items->first()->product->store; // Lấy thông tin store từ sản phẩm
+        // Format dữ liệu trả về
+        $formattedCart = [
+            'cart_id' => $cart->id,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->username,
+                'email' => $user->email,
+                'address' => $user->address
+            ],
+            'total_items' => $totalItems, // Tổng số lượng sản phẩm trong giỏ hàng
+            'total_products' => $totalProducts, // Tổng số loại sản phẩm trong giỏ hàng
+            'stores' => $groupedItems->map(function ($items, $storeId) {
+                $store = $items->first()->product->store; // Lấy thông tin store từ sản phẩm
 
             $totalQuantity = $items->sum('quantity'); // Tổng số lượng sản phẩm trong store
             $totalAmount = $items->sum(fn ($cartItem) => $cartItem->quantity * $cartItem->product->discounted_price); // Tổng tiền cho store
@@ -87,99 +88,20 @@ class CartController extends Controller
                 }),
             ];
         }),
-    ];
-    return ApiResponse::success($formattedCart, "Cart returned successfully");
-    }
-
-
-    public function addToCart(Request $request)
-    {
-        if (!Auth::check()) {
-            return response()->json(['error' => 'User not authenticated.'], 401);
-        }
-    
-<<<<<<< HEAD
-=======
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['error' => 'User not found.'], 404);
-        }
-    
-        // Lấy giỏ hàng của user
-        $cart = Cart::where('user_id', $user->id)->first();
-    
-        if (!$cart) {
-            return response()->json(['message' => 'Your cart is empty.'], 200);
-        }
-    
-        $cartItems = $cart->cartItems()->with('product.store', 'product.images')->get();
-    
-        if ($cartItems->isEmpty()) {
-            return response()->json(['message' => 'No items in the cart.'], 200);
-        }
-    
-        // Nhóm các sản phẩm theo store
-        $groupedItems = $cartItems->groupBy(function ($cartItem) {
-            return $cartItem->product->store->id; // Nhóm theo ID của cửa hàng
-        });
-    
-        // Format dữ liệu trả về
-        $formattedCart = [
-            'cart_id' => $cart->id,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->username,
-                'email' => $user->email,
-            ],
-            'stores' => $groupedItems->map(function ($items, $storeId) {
-                $store = $items[0]->product->store; // Lấy thông tin store từ sản phẩm
-    
-                $totalQuantity = $items->sum('quantity'); // Tổng số lượng sản phẩm trong store
-                $totalAmount = $items->sum(function ($cartItem) {
-                    return $cartItem->quantity * $cartItem->product->discounted_price; // Tổng tiền cho store
-                });
-    
-                return [
-                    'store_id' => $store->id,
-                    'store_name' => $store->store_name,
-                    'store_address' => $store->address,
-                    'store_latitude' => $store->latitude,
-                    'store_longitude' => $store->longitude,
-                    'total_quantity' => $totalQuantity,
-                    'total_amount' => $totalAmount,
-                    'items' => $items->map(function ($cartItem) {
-                        $product = $cartItem->product;
-    
-                        return [
-                            'product_id' => $product->id,
-                            'product_name' => $product->name,
-                            'quantity' => $cartItem->quantity,
-                            'original_price' => $product->original_price,
-                            'price' => $product->discounted_price,
-                            'subtotal' => $cartItem->quantity * $product->discounted_price,
-                            'images' => $product->images
-                        ];
-                    }),
-                ];
-            }),
         ];
-    
         return ApiResponse::success($formattedCart, "Cart returned successfully");
     }
 
-    // 🛍️ API: Thêm sản phẩm vào giỏ hàng
     public function addToCart(Request $request)
     {
         if (!Auth::check()) {
             return response()->json(['error' => 'User not authenticated.'], 401);
         }
-
->>>>>>> 99730a6ceb26c763d52058d467a810481e8b8951
+    
         $request->validate([
             'product_id' => 'required|exists:products,id',
             'quantity' => 'required|integer|min:1',
         ]);
-<<<<<<< HEAD
     
         $user_id = Auth::id();
         $product = Product::find($request->product_id);
@@ -195,32 +117,11 @@ class CartController extends Controller
         // Lấy hoặc tạo giỏ hàng
         $cart = Cart::firstOrCreate(['user_id' => $user_id]);
     
-=======
-
-        $user_id = Auth::id();
-        $product = Product::find($request->product_id);
-
-        if (!$product) {
-            return response()->json(['error' => 'Product not found.'], 404);
-        }
-
-        if ($product->stock_quantity < $request->quantity) {
-            return response()->json(['error' => 'This product is out of stock.'], 400);
-        }
-
-        // Lấy hoặc tạo giỏ hàng
-        $cart = Cart::firstOrCreate(['user_id' => $user_id]);
-
->>>>>>> 99730a6ceb26c763d52058d467a810481e8b8951
         // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
         $cartItem = CartItem::where('cart_id', $cart->id)
                             ->where('product_id', $request->product_id)
                             ->first();
-<<<<<<< HEAD
     
-=======
-
->>>>>>> 99730a6ceb26c763d52058d467a810481e8b8951
         if ($cartItem) {
             // Cập nhật số lượng sản phẩm trong giỏ hàng
             $cartItem->quantity += $request->quantity;
@@ -233,7 +134,6 @@ class CartController extends Controller
                 'quantity' => $request->quantity,
             ]);
         }
-<<<<<<< HEAD
         
         // Cập nhật tổng số sản phẩm trong giỏ hàng
         $totalItems = CartItem::where('cart_id', $cart->id)->sum('quantity');
@@ -244,18 +144,124 @@ class CartController extends Controller
         ], 200);
     }
     
-=======
+    public function getCartDetail(Request $request, $storeId)
+    {
+        if (!Auth::check()) {
+            return response()->json(['error' => 'User not authenticated.'], 401);
+        }
 
-        // Giảm số lượng hàng trong kho
-        $product->stock_quantity -= $request->quantity;
-        $product->save();
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'User not found.'], 404);
+        }
 
-        // Cập nhật tổng số sản phẩm trong giỏ hàng
-        $totalItems = CartItem::where('cart_id', $cart->id)->sum('quantity');
+        $cart = Cart::where('user_id', $user->id)->first();
+        if (!$cart) {
+            return response()->json(['message' => 'Your cart is empty.'], 200);
+        }
 
-        return response()->json([
-            'message' => 'Product added to cart successfully.',
-        ], 200);
+        // Lấy sản phẩm thuộc store_id cụ thể
+        $cartItems = $cart->cartItems()
+            ->whereHas('product.store', function ($query) use ($storeId) {
+                $query->where('id', $storeId);
+            })
+            ->with('product.store', 'product.images')
+            ->get();
+
+        if ($cartItems->isEmpty()) {
+            return response()->json(['message' => 'No items found for this store.'], 200);
+        }
+
+        // Lấy thông tin store từ sản phẩm đầu tiên
+        $store = $cartItems->first()->product->store;
+
+        $formattedCart = [
+            'cart_id' => $cart->id,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->username,
+                'email' => $user->email,
+                'address' => $user->address
+            ],
+            'store' => [
+                'store_id' => $store->id,
+                'store_name' => $store->store_name,
+                'store_address' => $store->address,
+                'store_latitude' => $store->latitude,
+                'store_longitude' => $store->longitude,
+                'items' => $cartItems->map(function ($cartItem) {
+                    return [
+                        'product_id' => $cartItem->product->id,
+                        'name' => $cartItem->product->name,
+                        'quantity' => $cartItem->quantity,
+                        'stock_quantity'=> $cartItem->product->stock_quantity,
+                        'original_price' => $cartItem->product->original_price,
+                        'discounted_price' => $cartItem->product->discounted_price,
+                        'subtotal' => $cartItem->quantity * $cartItem->product->discounted_price,
+                        'images' => $cartItem->product->images
+                    ];
+                }),
+            ]
+        ];
+
+        return ApiResponse::success($formattedCart, "Cart for store returned successfully");
     }
->>>>>>> 99730a6ceb26c763d52058d467a810481e8b8951
+
+    public function removeItem(Request $request)
+    {
+        if (!Auth::check()) {
+            return response()->json(['error' => 'User not authenticated.'], 401);
+        }
+
+        $user = Auth::user();
+        $cart = Cart::where('user_id', $user->id)->first();
+
+        if (!$cart) {
+            return response()->json(['error' => 'Cart not found.'], 404);
+        }
+
+        $cartItem = CartItem::where('cart_id', $cart->id)
+            ->where('product_id', $request->product_id)
+            ->first();
+
+        if (!$cartItem) {
+            return response()->json(['error' => 'Item not found in cart.'], 404);
+        }
+
+        $cartItem->delete();
+
+        return response()->json(['message' => 'Item removed successfully.']);
+    }
+
+    public function updateItemQuantity(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        if (!Auth::check()) {
+            return response()->json(['error' => 'User not authenticated.'], 401);
+        }
+
+        $user = Auth::user();
+        $cart = Cart::where('user_id', $user->id)->first();
+
+        if (!$cart) {
+            return response()->json(['error' => 'Cart not found.'], 404);
+        }
+
+        $cartItem = CartItem::where('cart_id', $cart->id)
+            ->where('product_id', $request->product_id)
+            ->first();
+
+        if (!$cartItem) {
+            return response()->json(['error' => 'Item not found in cart.'], 404);
+        }
+
+        $cartItem->update(['quantity' => $request->quantity]);
+
+        return response()->json(['message' => 'Item quantity updated successfully.', 'cart_item' => $cartItem]);
+    }
+
 }
