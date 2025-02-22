@@ -3,9 +3,6 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Database\Seeders\RolesSeeder;
-use Database\Seeders\UsersSeeder;
-use Database\Seeders\CategorySeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -21,8 +18,14 @@ class DatabaseSeeder extends Seeder
             UsersSeeder::class,
             StoreSeeder::class,
             CategorySeeder::class,
-            ProductSeeder::class
+            ProductSeeder::class,
+            ImageSeeder::class,
+            ReviewSeeder::class,
+            CartSeeder::class,
+            CartItemSeeder::class,
+            OrderSeeder::class,
+            PurchaseHistorySeeder::class,
+            OrderItemSeeder::class,
         ]);
-
     }
 }

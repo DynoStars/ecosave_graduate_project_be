@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Store;
@@ -14,44 +15,66 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $user = auth()->user();
-        $latitude = $user->latitude;
-        $longitude = $user->longitude;
+        $query = Product::with(['store', 'category', 'images']);
 
-        $products = Product::with(['store', 'category', 'images'])
-            ->select('products.*')
-            ->selectRaw("
-            ( 6371 * acos( cos( radians(?) ) *
-            cos( radians( stores.latitude ) )
-            * cos( radians( stores.longitude ) - radians(?)
-            ) + sin( radians(?) ) *
-            sin( radians( stores.latitude ) ) )
-            ) AS distance", [$latitude, $longitude, $latitude])
-            ->join('stores', 'products.store_id', '=', 'stores.id')
-            ->orderBy('distance')
-            ->get();
+        // Mảng điều kiện lọc
+        $filters = [
+            'store_id' => 'store_id',
+            'expiration_date' => 'expiration_date',
+            'min_price' => ['discounted_price', '>='],
+            'max_price' => ['discounted_price', '<='],
+        ];
 
-        $formattedProducts = $products->map(function ($product) {
-            return [
-                'id' => $product->id,
-                'name' => $product->name,
-                'images' => $product->images->map(function ($image) {
-                    return [
-                        'url' => $image->image_url,
-                        'order' => $image->image_order
-                    ];
-                }),
-                'distance' => round($product->distance, 2),
-                'store_name' => explode(' ', $product->store->store_name)[0],
-                'product_type' => $product->product_type,
-                'original_price' => $product->original_price,
-                'discount_price' => $product->discount_price,
-                'discount_percent' => $product->discount_percent,
-            ];
+        // Áp dụng bộ lọc động
+        foreach ($filters as $param => $condition) {
+            if ($request->has($param)) {
+                if (is_array($condition)) {
+                    $query->where($condition[0], $condition[1], $request->$param);
+                } else {
+                    $query->where($condition, $request->$param);
+                }
+            }
+        }
+
+        // Lọc theo ID cửa hàng (nếu có)
+        $query->when($request->store_id, function ($q, $storeId) {
+            return $q->where('store_id', $storeId);
         });
 
-        return response()->json($formattedProducts);
+        // Lọc theo tên sản phẩm
+        $query->when($request->name, function ($q, $name) {
+            return $q->where('name', 'like', "%$name%");
+        });
+
+        // Lọc theo tên cửa hàng
+        $query->when($request->store_name, function ($q, $storeName) {
+            return $q->whereHas('store', fn($store) => $store->where('store_name', 'like', "%$storeName%"));
+        });
+
+        // Lọc theo nhiều danh mục
+        $query->when($request->category_id, function ($q, $categoryIds) {
+            return $q->whereIn('category_id', explode(',', $categoryIds));
+        });
+
+        // Lọc theo tên danh mục
+        $query->when($request->category_name, function ($q, $categoryName) {
+            return $q->whereHas('category', fn($category) => $category->where('name', 'like', "%$categoryName%"));
+        });
+
+        // Lọc theo đánh giá (rating) nếu hợp lệ
+        $query->when($request->rating, function ($q, $rating) {
+            return ($rating >= 0 && $rating <= 5)
+                ? $q->where('rating', '>=', (float) $rating)
+                : ApiResponse::error('Giá trị rating không hợp lệ. Vui lòng nhập số từ 0 đến 5.', 400);
+        });
+
+        // Phân trang
+        $products = $query->paginate(100);
+
+        return ApiResponse::paginate($products, "Lấy danh sách sản phẩm thành công");
     }
+
+
 
     public function productDetail($id)
     {

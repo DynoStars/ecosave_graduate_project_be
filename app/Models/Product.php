@@ -21,6 +21,7 @@ class Product extends Model
         'stock_quantity',
         'store_id',
         'category_id',
+        'rating'
     ];
 
     protected $dates = ['deleted_at'];
@@ -39,4 +40,10 @@ class Product extends Model
     {
         return $this->hasMany(Image::class);
     }
+
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
 }
