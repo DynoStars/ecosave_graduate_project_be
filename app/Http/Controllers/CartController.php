@@ -105,15 +105,15 @@ class CartController extends Controller
     
         $user_id = Auth::id();
         $product = Product::find($request->product_id);
-    
+
         if (!$product) {
             return response()->json(['error' => 'Product not found.'], 404);
         }
-    
+
         if ($product->stock_quantity < $request->quantity) {
             return response()->json(['error' => 'This product is out of stock.'], 400);
         }
-    
+
         // Lấy hoặc tạo giỏ hàng
         $cart = Cart::firstOrCreate(['user_id' => $user_id]);
     
@@ -137,10 +137,10 @@ class CartController extends Controller
         
         // Cập nhật tổng số sản phẩm trong giỏ hàng
         $totalItems = CartItem::where('cart_id', $cart->id)->sum('quantity');
-    
+
         return response()->json([
             'message' => 'Product added to cart successfully.',
-            'total_items' => $totalItems, 
+            'total_items' => $totalItems,
         ], 200);
     }
     
