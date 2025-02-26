@@ -74,8 +74,6 @@ class ProductController extends Controller
         return ApiResponse::paginate($products, "Lấy danh sách sản phẩm thành công");
     }
 
-
-
     public function productDetail($id)
     {
         try {
@@ -88,8 +86,6 @@ class ProductController extends Controller
             return ApiResponse::error("Lỗi xảy ra khi lấy sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
-
-
 
     private function getUserStore()
     {
@@ -108,10 +104,11 @@ class ProductController extends Controller
             'description' => $product->description,
             'original_price' => $product->original_price,
             'discount_percent' => $product->discount_percent,
-            'discount_price' => $product->discount_price,
+            'discounted_price' => $product->discounted_price,
             'product_type' => $product->product_type,
             'expiration_date' => $product->expiration_date,
             'stock_quantity' => $product->stock_quantity,
+            'rating' => $product->rating,
             'category' => $product->category,
             'store' => $product->store,
             'images' => $product->images->map(function ($image) {
@@ -130,25 +127,52 @@ class ProductController extends Controller
     public function getProductsByStore()
     {
         try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return response()->json(['message' => 'Bạn không có quyền truy cập cửa hàng này'], 403);
+            // Kiểm tra user đã đăng nhập
+            $user = Auth::user();
+            if (!$user) {
+                return ApiResponse::error("Vui lòng đăng nhập để truy cập", [], 401);
             }
-            $products = $store->products()->with(['store', 'category', 'images'])->paginate(10);
 
-            $formattedProducts = $products->through(function ($product) {
-                return $this->formatProduct($product);
-            });
+            // Kiểm tra role
+            if ($user->role !== 3) {
+                return ApiResponse::error("Bạn không có quyền truy cập (không phải store owner)", [], 403);
+            }
 
-            return response()->json([
-                'data' => $formattedProducts->items(),
+            // Tìm store của user
+            $store = Store::where('user_id', $user->id)->first();
+            if (!$store) {
+                return ApiResponse::error("Bạn chưa có cửa hàng nào", [], 404);
+            }
+
+            // Lấy sản phẩm trực tiếp từ Product model
+            $products = Product::where('store_id', $store->id)
+                ->with(['store', 'category', 'images'])
+                ->paginate(10);
+
+            if ($products->isEmpty()) {
+                return ApiResponse::success(
+                    [
+                        'data' => [],
+                        'total' => 0,
+                        'current_page' => 1,
+                        'per_page' => 10,
+                        'last_page' => 1
+                    ],
+                    "Cửa hàng chưa có sản phẩm nào"
+                );
+            }
+
+            $formattedProducts = [
+                'data' => $products->through(fn($product) => $this->formatProduct($product))->items(),
                 'total' => $products->total(),
                 'current_page' => $products->currentPage(),
                 'per_page' => $products->perPage(),
                 'last_page' => $products->lastPage()
-            ]);
+            ];
+
+            return ApiResponse::success($formattedProducts, "Lấy danh sách sản phẩm thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Không thể lấy danh sách sản phẩm', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi lấy danh sách sản phẩm: " . $e->getMessage(), [], 500);
         }
     }
 
@@ -157,7 +181,7 @@ class ProductController extends Controller
         try {
             $store = $this->getUserStore();
             if (!$store) {
-                return response()->json(['message' => 'Bạn không có quyền thêm sản phẩm vào cửa hàng này'], 403);
+                return ApiResponse::error("Bạn không có quyền thêm sản phẩm vào cửa hàng này", [], 403);
             }
 
             $request->validate([
@@ -180,7 +204,6 @@ class ProductController extends Controller
 
             $product = Product::create($productData);
 
-            // Handle images if provided
             if ($request->has('images')) {
                 foreach ($request->images as $image) {
                     $product->images()->create([
@@ -191,12 +214,9 @@ class ProductController extends Controller
             }
 
             $product->load(['store', 'category', 'images']);
-            return response()->json([
-                'message' => 'Sản phẩm đã được thêm!',
-                'product' => $this->formatProduct($product)
-            ], 201);
+            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được thêm thành công", 201);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi thêm sản phẩm!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi thêm sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -204,13 +224,17 @@ class ProductController extends Controller
     {
         try {
             $store = $this->getUserStore();
+            if (!$store) {
+                return ApiResponse::error("Bạn không có quyền truy cập sản phẩm này", [], 403);
+            }
+
             $product = Product::with(['store', 'category', 'images'])
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
 
-            return response()->json($this->formatProduct($product));
+            return ApiResponse::success($this->formatProduct($product), "Lấy thông tin sản phẩm thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Không thể lấy sản phẩm', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Không thể lấy sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -218,6 +242,10 @@ class ProductController extends Controller
     {
         try {
             $store = $this->getUserStore();
+            if (!$store) {
+                return ApiResponse::error("Bạn không có quyền cập nhật sản phẩm này", [], 403);
+            }
+
             $product = Product::where('store_id', $store->id)->findOrFail($productId);
 
             $request->validate([
@@ -238,12 +266,8 @@ class ProductController extends Controller
             $productData = $request->except('images');
             $product->update($productData);
 
-            // Update images if provided
             if ($request->has('images')) {
-                // Delete existing images
                 $product->images()->delete();
-
-                // Add new images
                 foreach ($request->images as $image) {
                     $product->images()->create([
                         'image_url' => $image['image_url'],
@@ -253,12 +277,9 @@ class ProductController extends Controller
             }
 
             $product->load(['store', 'category', 'images']);
-            return response()->json([
-                'message' => 'Sản phẩm đã được cập nhật!',
-                'product' => $this->formatProduct($product)
-            ]);
+            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được cập nhật thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi cập nhật sản phẩm!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi cập nhật sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -266,11 +287,16 @@ class ProductController extends Controller
     {
         try {
             $store = $this->getUserStore();
+            if (!$store) {
+                return ApiResponse::error("Bạn không có quyền xóa sản phẩm này", [], 403);
+            }
+
             $product = Product::where('store_id', $store->id)->findOrFail($productId);
             $product->delete();
-            return response()->json(['message' => 'Sản phẩm đã được xóa mềm!']);
+
+            return ApiResponse::success(null, "Sản phẩm đã được xóa thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi xóa sản phẩm!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi xóa sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -279,26 +305,25 @@ class ProductController extends Controller
         try {
             $store = $this->getUserStore();
             if (!$store) {
-                return response()->json(['message' => 'Bạn không có quyền truy cập cửa hàng này'], 403);
+                return ApiResponse::error("Bạn không có quyền truy cập cửa hàng này", [], 403);
             }
+
             $products = Product::onlyTrashed()
                 ->where('store_id', $store->id)
                 ->with(['store', 'category', 'images'])
                 ->paginate(10);
 
-            $formattedProducts = $products->through(function ($product) {
-                return $this->formatProduct($product);
-            });
-
-            return response()->json([
-                'data' => $formattedProducts->items(),
+            $formattedProducts = [
+                'data' => $products->through(fn($product) => $this->formatProduct($product))->items(),
                 'total' => $products->total(),
                 'current_page' => $products->currentPage(),
                 'per_page' => $products->perPage(),
                 'last_page' => $products->lastPage()
-            ]);
+            ];
+
+            return ApiResponse::success($formattedProducts, "Lấy danh sách sản phẩm đã xóa thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi lấy danh sách sản phẩm đã xóa!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi lấy danh sách sản phẩm đã xóa", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -306,18 +331,20 @@ class ProductController extends Controller
     {
         try {
             $store = $this->getUserStore();
+            if (!$store) {
+                return ApiResponse::error("Bạn không có quyền khôi phục sản phẩm này", [], 403);
+            }
+
             $product = Product::onlyTrashed()
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
-            $product->restore();
 
+            $product->restore();
             $product->load(['store', 'category', 'images']);
-            return response()->json([
-                'message' => 'Sản phẩm đã được khôi phục!',
-                'product' => $this->formatProduct($product)
-            ]);
+
+            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được khôi phục thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi khôi phục sản phẩm!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi khôi phục sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 
@@ -325,19 +352,20 @@ class ProductController extends Controller
     {
         try {
             $store = $this->getUserStore();
+            if (!$store) {
+                return ApiResponse::error("Bạn không có quyền xóa vĩnh viễn sản phẩm này", [], 403);
+            }
+
             $product = Product::onlyTrashed()
                 ->where('store_id', $store->id)
                 ->findOrFail($productId);
 
-            // Delete associated images first
             $product->images()->delete();
-
-            // Then force delete the product
             $product->forceDelete();
 
-            return response()->json(['message' => 'Sản phẩm đã được xóa vĩnh viễn!']);
+            return ApiResponse::success(null, "Sản phẩm đã được xóa vĩnh viễn thành công");
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Lỗi khi xóa vĩnh viễn sản phẩm!', 'message' => $e->getMessage()], 500);
+            return ApiResponse::error("Lỗi khi xóa vĩnh viễn sản phẩm", ['error' => $e->getMessage()], 500);
         }
     }
 }

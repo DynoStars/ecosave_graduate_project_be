@@ -61,6 +61,7 @@ Route::group(['prefix' => 'stores/products', 'middleware' => 'auth:api'], functi
     Route::get('/{productId}', [ProductController::class, 'getProductByStore']);
     Route::put('/{productId}', [ProductController::class, 'putUpdateProduct']);
     Route::delete('/{productId}', [ProductController::class, 'deleteProduct']);
+    Route::get('/trashed', [ProductController::class, 'getTrashedProductsByStore']);
     Route::post('/{productId}/restore', [ProductController::class, 'restoreProduct']);
     Route::delete('/{productId}/force-delete', [ProductController::class, 'forceDeleteProduct']);
 });
