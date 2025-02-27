@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ProductCreated;
 use App\Helpers\ApiResponse;
 use App\Models\Product;
 use App\Models\User;
@@ -9,7 +10,6 @@ use App\Models\Store;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -87,14 +87,28 @@ class ProductController extends Controller
         }
     }
 
-    private function getUserStore()
-    {
+    private $storeId;
+
+    public function __construct()
+{
+    $this->middleware(function ($request, $next) {
         $user = Auth::user();
-        if ($user->role !== 3) {
-            return null; // Chỉ user có role 3 (store owner) mới có store
+        \Log::info('User:', ['user' => $user]);
+
+        if ($user && $user->role === 3) {
+            $store = Store::where('user_id', $user->id)->first();
+            \Log::info('Store:', ['store' => $store]);
+
+            $this->storeId = $store ? $store->id : null;
+        } else {
+            $this->storeId = null;
         }
-        return Store::where('user_id', $user->id)->first();
-    }
+
+        \Log::info('Store ID:', ['storeId' => $this->storeId]);
+
+        return $next($request);
+    });
+}
 
     private function formatProduct($product)
     {
@@ -124,204 +138,131 @@ class ProductController extends Controller
         ];
     }
 
-    public function getProductsByStore()
-    {
-        try {
-            // Kiểm tra user đã đăng nhập
-            $user = Auth::user();
-            if (!$user) {
-                return ApiResponse::error("Vui lòng đăng nhập để truy cập", [], 401);
-            }
+    public function getProductsByStoreName()
+{
+    \Log::info('Store ID in getProductsByStoreName:', ['storeId' => $this->storeId]);
 
-            // Kiểm tra role
-            if ($user->role !== 3) {
-                return ApiResponse::error("Bạn không có quyền truy cập (không phải store owner)", [], 403);
-            }
-
-            // Tìm store của user
-            $store = Store::where('user_id', $user->id)->first();
-            if (!$store) {
-                return ApiResponse::error("Bạn chưa có cửa hàng nào", [], 404);
-            }
-
-            // Lấy sản phẩm trực tiếp từ Product model
-            $products = Product::where('store_id', $store->id)
-                ->with(['store', 'category', 'images'])
-                ->paginate(10);
-
-            if ($products->isEmpty()) {
-                return ApiResponse::success(
-                    [
-                        'data' => [],
-                        'total' => 0,
-                        'current_page' => 1,
-                        'per_page' => 10,
-                        'last_page' => 1
-                    ],
-                    "Cửa hàng chưa có sản phẩm nào"
-                );
-            }
-
-            $formattedProducts = [
-                'data' => $products->through(fn($product) => $this->formatProduct($product))->items(),
-                'total' => $products->total(),
-                'current_page' => $products->currentPage(),
-                'per_page' => $products->perPage(),
-                'last_page' => $products->lastPage()
-            ];
-
-            return ApiResponse::success($formattedProducts, "Lấy danh sách sản phẩm thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi lấy danh sách sản phẩm: " . $e->getMessage(), [], 500);
-        }
+    if (!$this->storeId) {
+        \Log::error('Store ID is null or invalid.');
+        return ApiResponse::error("Bạn không có quyền truy cập", [], 403);
     }
+
+    $products = Product::where('store_id', $this->storeId)
+        ->with(['store', 'category', 'images'])
+        ->paginate(10);
+
+    \Log::info('Products found:', ['products' => $products]);
+
+    return ApiResponse::success($products, "Lấy danh sách sản phẩm thành công");
+}
 
     public function postAddProduct(Request $request)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền thêm sản phẩm vào cửa hàng này", [], 403);
-            }
-
-            $request->validate([
-                'name' => 'required|string|max:255',
-                'description' => 'nullable|string',
-                'original_price' => 'required|numeric|min:0',
-                'discount_percent' => 'required|integer|min:0|max:100',
-                'product_type' => 'required|string|max:255',
-                'discounted_price' => 'nullable|numeric|min:0',
-                'expiration_date' => 'nullable|date',
-                'stock_quantity' => 'required|integer|min:0',
-                'category_id' => 'required|exists:categories,id',
-                'images' => 'nullable|array',
-                'images.*.image_url' => 'required|string',
-                'images.*.image_order' => 'required|integer|min:0'
-            ]);
-
-            $productData = $request->except('images');
-            $productData['store_id'] = $store->id;
-
-            $product = Product::create($productData);
-
-            if ($request->has('images')) {
-                foreach ($request->images as $image) {
-                    $product->images()->create([
-                        'image_url' => $image['image_url'],
-                        'image_order' => $image['image_order']
-                    ]);
-                }
-            }
-
-            $product->load(['store', 'category', 'images']);
-            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được thêm thành công", 201);
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi thêm sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền thêm sản phẩm", [], 403);
         }
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'original_price' => 'required|numeric|min:0',
+            'discount_percent' => 'required|integer|min:0|max:100',
+            'product_type' => 'required|string|max:255',
+            'discounted_price' => 'nullable|numeric|min:0',
+            'expiration_date' => 'nullable|date',
+            'stock_quantity' => 'required|integer|min:0',
+            'category_id' => 'required|exists:categories,id',
+            'images' => 'nullable|array',
+            'images.*.image_url' => 'required|string',
+            'images.*.image_order' => 'required|integer|min:0'
+        ]);
+
+        $productData = $request->all();
+        $productData['store_id'] = $this->storeId;
+
+        $product = Product::create($productData);
+
+        if ($request->has('images')) {
+            foreach ($request->images as $image) {
+                $product->images()->create($image);
+            }
+        }
+
+        event(new ProductCreated($product));
+        return ApiResponse::success($product, "Sản phẩm đã được thêm thành công", 201);
     }
 
     public function getProductByStore($productId)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền truy cập sản phẩm này", [], 403);
-            }
-
-            $product = Product::with(['store', 'category', 'images'])
-                ->where('store_id', $store->id)
-                ->findOrFail($productId);
-
-            return ApiResponse::success($this->formatProduct($product), "Lấy thông tin sản phẩm thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Không thể lấy sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền truy cập sản phẩm này", [], 403);
         }
+
+        $product = Product::where('store_id', $this->storeId)->with(['store', 'category', 'images'])->findOrFail($productId);
+
+        return ApiResponse::success($product, "Lấy thông tin sản phẩm thành công");
     }
 
     public function putUpdateProduct(Request $request, $productId)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền cập nhật sản phẩm này", [], 403);
-            }
-
-            $product = Product::where('store_id', $store->id)->findOrFail($productId);
-
-            $request->validate([
-                'name' => 'required|string|max:255',
-                'description' => 'nullable|string',
-                'original_price' => 'required|numeric|min:0',
-                'discount_percent' => 'required|integer|min:0|max:100',
-                'product_type' => 'required|string|max:255',
-                'discounted_price' => 'nullable|numeric|min:0',
-                'expiration_date' => 'nullable|date',
-                'stock_quantity' => 'required|integer|min:0',
-                'category_id' => 'required|exists:categories,id',
-                'images' => 'nullable|array',
-                'images.*.image_url' => 'required|string',
-                'images.*.image_order' => 'required|integer|min:0'
-            ]);
-
-            $productData = $request->except('images');
-            $product->update($productData);
-
-            if ($request->has('images')) {
-                $product->images()->delete();
-                foreach ($request->images as $image) {
-                    $product->images()->create([
-                        'image_url' => $image['image_url'],
-                        'image_order' => $image['image_order']
-                    ]);
-                }
-            }
-
-            $product->load(['store', 'category', 'images']);
-            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được cập nhật thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi cập nhật sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền cập nhật sản phẩm này", [], 403);
         }
+
+        $product = Product::where('store_id', $this->storeId)->findOrFail($productId);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'original_price' => 'required|numeric|min:0',
+            'discount_percent' => 'required|integer|min:0|max:100',
+            'product_type' => 'required|string|max:255',
+            'discounted_price' => 'nullable|numeric|min:0',
+            'expiration_date' => 'nullable|date',
+            'stock_quantity' => 'required|integer|min:0',
+            'category_id' => 'required|exists:categories,id',
+            'images' => 'nullable|array',
+            'images.*.image_url' => 'required|string',
+            'images.*.image_order' => 'required|integer|min:0'
+        ]);
+
+        $product->update($request->except('images'));
+
+        if ($request->has('images')) {
+            $product->images()->delete();
+            foreach ($request->images as $image) {
+                $product->images()->create($image);
+            }
+        }
+
+        return ApiResponse::success($product, "Sản phẩm đã được cập nhật thành công");
     }
 
     public function deleteProduct($productId)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền xóa sản phẩm này", [], 403);
-            }
-
-            $product = Product::where('store_id', $store->id)->findOrFail($productId);
-            $product->delete();
-
-            return ApiResponse::success(null, "Sản phẩm đã được xóa thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi xóa sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền xóa sản phẩm này", [], 403);
         }
+
+        $product = Product::where('store_id', $this->storeId)->findOrFail($productId);
+        $product->delete();
+
+        return ApiResponse::success(null, "Sản phẩm đã được xóa thành công");
     }
 
     public function getTrashedProductsByStore()
     {
         try {
-            $store = $this->getUserStore();
-            if (!$store) {
+            if (!$this->storeId) {
                 return ApiResponse::error("Bạn không có quyền truy cập cửa hàng này", [], 403);
             }
 
             $products = Product::onlyTrashed()
-                ->where('store_id', $store->id)
+                ->where('store_id', $this->storeId)
                 ->with(['store', 'category', 'images'])
                 ->paginate(10);
 
-            $formattedProducts = [
-                'data' => $products->through(fn($product) => $this->formatProduct($product))->items(),
-                'total' => $products->total(),
-                'current_page' => $products->currentPage(),
-                'per_page' => $products->perPage(),
-                'last_page' => $products->lastPage()
-            ];
-
-            return ApiResponse::success($formattedProducts, "Lấy danh sách sản phẩm đã xóa thành công");
+            return ApiResponse::success($products, "Lấy danh sách sản phẩm đã xóa thành công");
         } catch (\Exception $e) {
             return ApiResponse::error("Lỗi khi lấy danh sách sản phẩm đã xóa", ['error' => $e->getMessage()], 500);
         }
@@ -329,43 +270,26 @@ class ProductController extends Controller
 
     public function restoreProduct($productId)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền khôi phục sản phẩm này", [], 403);
-            }
-
-            $product = Product::onlyTrashed()
-                ->where('store_id', $store->id)
-                ->findOrFail($productId);
-
-            $product->restore();
-            $product->load(['store', 'category', 'images']);
-
-            return ApiResponse::success($this->formatProduct($product), "Sản phẩm đã được khôi phục thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi khôi phục sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền khôi phục sản phẩm này", [], 403);
         }
+
+        $product = Product::onlyTrashed()->where('store_id', $this->storeId)->findOrFail($productId);
+        $product->restore();
+
+        return ApiResponse::success($product, "Sản phẩm đã được khôi phục thành công");
     }
 
     public function forceDeleteProduct($productId)
     {
-        try {
-            $store = $this->getUserStore();
-            if (!$store) {
-                return ApiResponse::error("Bạn không có quyền xóa vĩnh viễn sản phẩm này", [], 403);
-            }
-
-            $product = Product::onlyTrashed()
-                ->where('store_id', $store->id)
-                ->findOrFail($productId);
-
-            $product->images()->delete();
-            $product->forceDelete();
-
-            return ApiResponse::success(null, "Sản phẩm đã được xóa vĩnh viễn thành công");
-        } catch (\Exception $e) {
-            return ApiResponse::error("Lỗi khi xóa vĩnh viễn sản phẩm", ['error' => $e->getMessage()], 500);
+        if (!$this->storeId) {
+            return ApiResponse::error("Bạn không có quyền xóa vĩnh viễn sản phẩm này", [], 403);
         }
+
+        $product = Product::onlyTrashed()->where('store_id', $this->storeId)->findOrFail($productId);
+        $product->images()->delete();
+        $product->forceDelete();
+
+        return ApiResponse::success(null, "Sản phẩm đã được xóa vĩnh viễn thành công");
     }
 }
