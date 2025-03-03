@@ -8,6 +8,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\ImageController;
+use App\Http\Controllers\SaveProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -52,18 +53,26 @@ Route::group(['middleware' => 'auth:api'], function () {
     Route::get('/cart/{storeId}', [CartController::class, 'getCartDetail']);
     Route::delete('/cart/remove-item', [CartController::class, 'removeItem']);
     Route::put('/cart/update-quantity', [CartController::class, 'updateItemQuantity']);
+    // product after scaned
+    Route::get('/save-products', [SaveProductController::class, 'getSaveProductsByUser']);
+    Route::post('/save-products', [SaveProductController::class, 'storeSaveProduct']);
 });
 
 // Store Products Routes (Authenticated)
-Route::group(['prefix' => 'stores/products', 'middleware' => 'auth:api'], function () {
-    Route::get('/', [ProductController::class, 'getProductsByStore']);
+Route::group(['prefix' => 'stores/{storeId}/products', 'middleware' => 'auth:api'], function () {
+    Route::get('/', [ProductController::class, 'getProductsByStoreName']);
     Route::post('/', [ProductController::class, 'postAddProduct']);
-    Route::get('/{productId}', [ProductController::class, 'getProductByStore']);
-    Route::put('/{productId}', [ProductController::class, 'putUpdateProduct']);
-    Route::delete('/{productId}', [ProductController::class, 'deleteProduct']);
-    Route::post('/{productId}/restore', [ProductController::class, 'restoreProduct']);
-    Route::delete('/{productId}/force-delete', [ProductController::class, 'forceDeleteProduct']);
+    Route::get('/trashed', [ProductController::class, 'getTrashedProductsByStore']);
+
+    Route::group(['prefix' => '{productId}'], function () {
+        Route::get('/', [ProductController::class, 'getProductByStore']);
+        Route::put('/', [ProductController::class, 'putUpdateProduct']);
+        Route::delete('/', [ProductController::class, 'deleteProduct']);
+        Route::post('/restore', [ProductController::class, 'restoreProduct']);
+        Route::delete('/force-delete', [ProductController::class, 'forceDeleteProduct']);
+    });
 });
+
 
 Route::post('/upload-image', [ImageController::class, 'upload']);
 Route::get('/categories', [CategoryController::class, 'index']);

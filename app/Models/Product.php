@@ -28,7 +28,7 @@ class Product extends Model
         'name',
         'description',
         'original_price',
-        'discount_price',
+        'discounted_price',
         'discount_percent',
         'expiration_date',
         'product_type',
