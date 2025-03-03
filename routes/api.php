@@ -56,6 +56,7 @@ Route::group(['middleware' => 'auth:api'], function () {
     // product after scaned
     Route::get('/save-products', [SaveProductController::class, 'getSaveProductsByUser']);
     Route::post('/save-products', [SaveProductController::class, 'storeSaveProduct']);
+    Route::post('/check-product-exists', [SaveProductController::class, 'checkProductExists']);
 });
 
 // Store Products Routes (Authenticated)
@@ -64,19 +65,19 @@ Route::group(['prefix' => 'stores/{storeId}/products', 'middleware' => 'auth:api
     Route::post('/', [ProductController::class, 'postAddProduct']);
     Route::get('/trashed', [ProductController::class, 'getTrashedProductsByStore']);
 
-    Route::group(['prefix' => '{productId}'], function () {
-        Route::get('/', [ProductController::class, 'getProductByStore']);
-        Route::put('/', [ProductController::class, 'putUpdateProduct']);
-        Route::delete('/', [ProductController::class, 'deleteProduct']);
-        Route::post('/restore', [ProductController::class, 'restoreProduct']);
-        Route::delete('/force-delete', [ProductController::class, 'forceDeleteProduct']);
-    });
+    Route::post('{productId}/restore', [ProductController::class, 'restoreProduct']);
+    Route::delete('{productId}/force-delete', [ProductController::class, 'forceDeleteProduct']);
+
+    Route::get('/{productId}', [ProductController::class, 'getProductByStore']);
+    Route::put('/{productId}', [ProductController::class, 'putUpdateProduct']);
+    Route::delete('/{productId}', [ProductController::class, 'deleteProduct']);
 });
 
 
 Route::post('/upload-image', [ImageController::class, 'upload']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categoriesByNameAndId', [CategoryController::class, 'getCategoryByNameAndId']);
+Route::get('/store-id', [ProductController::class, 'getStoreId'])->middleware('auth:api');
 
 // Authentication Routes
 require __DIR__ . '/auth.php';
