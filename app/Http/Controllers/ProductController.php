@@ -17,7 +17,7 @@ class ProductController extends Controller
     {
         $query = Product::with(['store', 'category', 'images']);
 
-        // Mảng điều kiện lọc
+        // Các bộ lọc cơ bản
         $filters = [
             'store_id' => 'store_id',
             'expiration_date' => 'expiration_date',
@@ -25,7 +25,6 @@ class ProductController extends Controller
             'max_price' => ['discounted_price', '<='],
         ];
 
-        // Áp dụng bộ lọc động (chỉ khi có giá trị hợp lệ)
         foreach ($filters as $param => $condition) {
             if ($request->filled($param)) {
                 is_array($condition)
@@ -46,7 +45,7 @@ class ProductController extends Controller
             });
         }
 
-        // Lọc theo danh mục ID (danh sách ID cách nhau bằng dấu phẩy)
+        // Lọc theo danh mục
         if ($request->filled('category_id')) {
             $categoryIds = array_filter(explode(',', $request->category_id));
             if (!empty($categoryIds)) {
@@ -54,7 +53,6 @@ class ProductController extends Controller
             }
         }
 
-        // Lọc theo tên danh mục
         if ($request->filled('category_name')) {
             $query->whereHas('category', function ($q) use ($request) {
                 $q->where('name', 'like', "%{$request->category_name}%");
@@ -63,20 +61,22 @@ class ProductController extends Controller
 
         // Lọc theo khoảng cách
         if ($request->has(['distance', 'user_lat', 'user_lng'])) {
-            $distance = $request->distance;
-            $userLat = $request->user_lat;
-            $userLng = $request->user_lng;
+            $distance = (float) $request->distance;
+            $userLat = (float) $request->user_lat;
+            $userLng = (float) $request->user_lng;
 
-            $query->selectRaw("products.*,
-                (6371 * acos(
-                    cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?))
-                    + sin(radians(?)) * sin(radians(latitude))
-                )) AS distance", [$userLat, $userLng, $userLat])
-                ->having("distance", "=", $distance)
-                ->orderBy("distance", "asc");
+            $query->whereHas('store', function ($q) use ($userLat, $userLng, $distance) {
+                $q->selectRaw("stores.*,
+                    (6371 * acos(
+                        cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?))
+                        + sin(radians(?)) * sin(radians(latitude))
+                    )) AS distance", [$userLat, $userLng, $userLat])
+                    ->having("distance", "<=", $distance)
+                    ->orderBy("distance", "asc");
+            });
         }
 
-        // Lọc theo đánh giá (rating)
+        // Lọc theo đánh giá
         if ($request->filled('rating')) {
             $rating = (float) $request->rating;
             if ($rating >= 0 && $rating <= 5) {
@@ -91,6 +91,7 @@ class ProductController extends Controller
 
         return ApiResponse::paginate($products, "Lấy danh sách sản phẩm thành công");
     }
+
 
 
     public function productDetail($id)
