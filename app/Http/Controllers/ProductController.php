@@ -14,68 +14,83 @@ use Illuminate\Http\Request;
 class ProductController extends Controller
 {
     public function index(Request $request)
-{
-    $query = Product::with(['store', 'category', 'images']);
+    {
+        $query = Product::with(['store', 'category', 'images']);
 
-    // Mảng điều kiện lọc
-    $filters = [
-        'store_id' => 'store_id',
-        'expiration_date' => 'expiration_date',
-        'min_price' => ['discounted_price', '>='],
-        'max_price' => ['discounted_price', '<='],
-    ];
+        // Mảng điều kiện lọc
+        $filters = [
+            'store_id' => 'store_id',
+            'expiration_date' => 'expiration_date',
+            'min_price' => ['discounted_price', '>='],
+            'max_price' => ['discounted_price', '<='],
+        ];
 
-    // Áp dụng bộ lọc động (chỉ khi có giá trị hợp lệ)
-    foreach ($filters as $param => $condition) {
-        if ($request->filled($param)) {
-            is_array($condition)
-                ? $query->where($condition[0], $condition[1], $request->$param)
-                : $query->where($condition, $request->$param);
+        // Áp dụng bộ lọc động (chỉ khi có giá trị hợp lệ)
+        foreach ($filters as $param => $condition) {
+            if ($request->filled($param)) {
+                is_array($condition)
+                    ? $query->where($condition[0], $condition[1], $request->$param)
+                    : $query->where($condition, $request->$param);
+            }
         }
-    }
 
-    // Lọc theo tên sản phẩm
-    if ($request->filled('name')) {
-        $query->where('name', 'like', "%{$request->name}%");
-    }
-
-    // Lọc theo tên cửa hàng
-    if ($request->filled('store_name')) {
-        $query->whereHas('store', function ($q) use ($request) {
-            $q->where('store_name', 'like', "%{$request->store_name}%");
-        });
-    }
-
-    // Lọc theo danh mục ID (danh sách ID cách nhau bằng dấu phẩy)
-    if ($request->filled('category_id')) {
-        $categoryIds = array_filter(explode(',', $request->category_id));
-        if (!empty($categoryIds)) {
-            $query->whereIn('category_id', $categoryIds);
+        // Lọc theo tên sản phẩm
+        if ($request->filled('name')) {
+            $query->where('name', 'like', "%{$request->name}%");
         }
-    }
 
-    // Lọc theo tên danh mục
-    if ($request->filled('category_name')) {
-        $query->whereHas('category', function ($q) use ($request) {
-            $q->where('name', 'like', "%{$request->category_name}%");
-        });
-    }
-
-    // Lọc theo đánh giá (rating) hợp lệ
-    if ($request->filled('rating')) {
-        $rating = (float) $request->rating;
-        if ($rating >= 0 && $rating <= 5) {
-            $query->where('rating', '=', $rating);
-        } else {
-            return ApiResponse::error('Giá trị rating không hợp lệ. Vui lòng nhập số từ 0 đến 5.', 400);
+        // Lọc theo tên cửa hàng
+        if ($request->filled('store_name')) {
+            $query->whereHas('store', function ($q) use ($request) {
+                $q->where('store_name', 'like', "%{$request->store_name}%");
+            });
         }
+
+        // Lọc theo danh mục ID (danh sách ID cách nhau bằng dấu phẩy)
+        if ($request->filled('category_id')) {
+            $categoryIds = array_filter(explode(',', $request->category_id));
+            if (!empty($categoryIds)) {
+                $query->whereIn('category_id', $categoryIds);
+            }
+        }
+
+        // Lọc theo tên danh mục
+        if ($request->filled('category_name')) {
+            $query->whereHas('category', function ($q) use ($request) {
+                $q->where('name', 'like', "%{$request->category_name}%");
+            });
+        }
+
+        // Lọc theo khoảng cách
+        if ($request->has(['distance', 'user_lat', 'user_lng'])) {
+            $distance = $request->distance;
+            $userLat = $request->user_lat;
+            $userLng = $request->user_lng;
+
+            $query->selectRaw("products.*,
+                (6371 * acos(
+                    cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?))
+                    + sin(radians(?)) * sin(radians(latitude))
+                )) AS distance", [$userLat, $userLng, $userLat])
+                ->having("distance", "=", $distance)
+                ->orderBy("distance", "asc");
+        }
+
+        // Lọc theo đánh giá (rating)
+        if ($request->filled('rating')) {
+            $rating = (float) $request->rating;
+            if ($rating >= 0 && $rating <= 5) {
+                $query->where('rating', '=', $rating);
+            } else {
+                return ApiResponse::error('Giá trị rating không hợp lệ. Vui lòng nhập số từ 0 đến 5.', 400);
+            }
+        }
+
+        // Phân trang
+        $products = $query->paginate(100);
+
+        return ApiResponse::paginate($products, "Lấy danh sách sản phẩm thành công");
     }
-
-    // Phân trang
-    $products = $query->paginate(100);
-
-    return ApiResponse::paginate($products, "Lấy danh sách sản phẩm thành công");
-}
 
 
     public function productDetail($id)
